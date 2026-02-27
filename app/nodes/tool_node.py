@@ -1,54 +1,11 @@
-from langchain_community.vectorstores import FAISS
-
-from langchain_core.tools import tool
-from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage
 
 from langsmith import traceable
 
 from app.graph.state import ChatState
 from app.services.llm_service import get_llm
-from app.services.vector_store_service import retriver_search
 from app.services.pdf_service import UploadFile, pdf_load
-from app.services.vector_store_service import build_vectorstore
-
-
-
-# ─────────────────────────────────────────
-# RAG tool for LangGraph agent
-# ─────────────────────────────────────────
-def make_rag_tool(vectorstore: FAISS):
-    """
-    Factory function — builds the rag_tool with vectorstore baked in.
-    Call this once after build_vectorstore() and pass the result to your agent.
-    """
-
-    @tool 
-    async def rag_tool(query: str) -> dict:
-        """
-        Retrieve relevant information from the pdf document.
-        Use this tool when the user asks factual / conceptual questions
-        that might be answered from the stored documents.
-        """
-        docs: list[Document] = await retriver_search(
-            vectorstore, 
-            query
-        )
-
-        context = "\n\n".join(
-            [doc.page_content for doc in docs]
-        )
-
-        metadata = [doc.metadata for doc in docs]
-
-        return {
-            "query": query,
-            "context": context,
-            "metadata": metadata,
-            "num_docs_retrieved": len(docs) 
-        }
-    
-    return rag_tool
+from app.services.vector_store_service import build_vectorstore, make_rag_tool
 
 
 # ─────────────────────────────────────────
@@ -81,7 +38,7 @@ def bind_tool_to_llm(rag_tool):
 # ─────────────────────────────────────────
 async def setup_rg_pipeline(upload: UploadFile):
     """Run once when a PDF is uploaded. Returns a ready-to-use rag_tool."""
-    
+
     tmp_path = await pdf_load(upload)
 
     vectorstore = await build_vectorstore(

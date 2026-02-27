@@ -9,9 +9,10 @@ load_dotenv()
 # ─────────────────────────────────────────
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         temperature=0.7,
         api_key=os.getenv("GOOGLE_API_KEY"),
+        thinking_budget=0,  # disables thinking mode → removes signature from output
     )
 
 
