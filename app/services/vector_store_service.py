@@ -13,7 +13,9 @@ from app.services.pdf_service import _index_key
 from app.services.llm_service import get_embedding
 
 
-
+# ─────────────────────────────────────────────────────────────────────
+# VectorStoreService: Builds and manages vectorstores for uploaded PDFs
+# ─────────────────────────────────────────────────────────────────────
 class VectorStoreService:
 
     def __init__(self, base_path: str = "faiss_index"):
@@ -98,6 +100,9 @@ class VectorStoreService:
 
 
 
+# ─────────────────────────────────────────
+# RAG pipeline components
+# ─────────────────────────────────────────
 class RetrieverService:
 
     def __init__(
@@ -132,38 +137,43 @@ class RetrieverService:
 # ─────────────────────────────────────────
 # RAG tool for LangGraph agent
 # ─────────────────────────────────────────
-def make_rag_tool(vectorstore: FAISS):
-    """
-    Factory function — builds the rag_tool with vectorstore baked in.
-    Call this once after build_vectorstore() and pass the result to your agent.
-    """
+class RAGToolService:
 
-    retriver_search = RetrieverService()
+    def __init__(self, vectorstore: FAISS):
+        self.vectorstore = vectorstore
+        self.retriever = RetrieverService()
 
-    @tool 
-    async def rag_tool(query: str) -> dict:
-        """
-        Retrieve relevant information from the pdf document.
-        Use this tool when the user asks factual / conceptual questions
-        that might be answered from the stored documents.
-        """
-        
-        docs: list[Document] = await retriver_search.search(
-            vectorstore, 
-            query,
-        )
+    def create_tool(self):
 
-        context = "\n\n".join(
-            [doc.page_content for doc in docs]
-        )
+        @tool
+        async def rag_tool(query: str) -> dict:
+            """
+            Search the uploaded PDF and return relevant context.
 
-        metadata = [doc.metadata for doc in docs]
+            Args:
+                query: The user's question related to the document.
 
-        return {
-            "query": query,
-            "context": context,
-            "metadata": metadata,
-            "num_docs_retrieved": len(docs) 
-        }
-    
-    return rag_tool
+            Returns:
+                A dictionary containing:
+                - query
+                - context
+                - metadata
+                - num_docs_retrieved
+            """
+
+            docs = await self.retriever.search(
+                self.vectorstore,
+                query,
+            )
+
+            context = "\n\n".join(doc.page_content for doc in docs)
+            metadata = [doc.metadata for doc in docs]
+
+            return {
+                "query": query,
+                "context": context,
+                "metadata": metadata,
+                "num_docs_retrieved": len(docs),
+            }
+
+        return rag_tool
