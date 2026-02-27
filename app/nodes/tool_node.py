@@ -5,7 +5,7 @@ from langsmith import traceable
 from app.graph.state import ChatState
 from app.services.llm_service import get_llm
 from app.services.pdf_service import UploadFile, pdf_load
-from app.services.vector_store_service import build_vectorstore, make_rag_tool
+from app.services.vector_store_service import VectorStoreService, make_rag_tool
 
 
 # ─────────────────────────────────────────
@@ -41,7 +41,9 @@ async def setup_rg_pipeline(upload: UploadFile):
 
     tmp_path = await pdf_load(upload)
 
-    vectorstore = await build_vectorstore(
+    vectorstore_service = VectorStoreService()
+
+    vectorstore = await vectorstore_service.build_vectorstore(
         pdf_temp_path=tmp_path,
     )
 

@@ -13,116 +13,120 @@ from app.services.pdf_service import _index_key
 from app.services.llm_service import get_embedding
 
 
-"""For vectorestore."""
-BASE_VECTORSTORE_PATH = "faiss_index"
-VECTORSTORE_CACHE = {}
 
-# ─────────────────────────────────────────
-# Build FAISS vectorstore
-# ─────────────────────────────────────────
-@traceable(name="build_vectorstore")
-async def build_vectorstore( 
-    pdf_temp_path: str,
-    chunk_size: int = 500,
-    chunk_overlap: int = 100,
+class VectorStoreService:
+
+    def __init__(self, base_path: str = "faiss_index"):
+        self.base_path = base_path
+        self.cache: dict[str, FAISS] = {}
+        os.makedirs(self.base_path, exist_ok=True)
+
+    @traceable(name="build_vectores")
+    async def build_vectorstore(
+        self,
+        pdf_temp_path: str,
+        chunk_size: int = 500,
+        chunk_overlap: int = 100, 
     ) -> FAISS:
+            
+        # Create embedding instance (professional pattern)
+        embedding = get_embedding()
+        embedding_name = "models/gemini-embedding-001"
 
-    os.makedirs(BASE_VECTORSTORE_PATH, exist_ok=True)
+        index_key = _index_key(
+            pdf_temp_path,
+            chunk_size,
+            chunk_overlap,
+            embedding_name,
+        )
 
-    # Create embedding instance (professional pattern)
-    embedding = get_embedding()
-    embedding_name = "models/gemini-embedding-001"
+        persist_path = os.path.join(self.base_path, index_key)
 
-    index_key = _index_key(
-        pdf_temp_path,
-        chunk_size,
-        chunk_overlap,
-        embedding_name,
-    )
+        try:
+            # ✅ In-memory cache
+            if index_key in self.cache:
+                print("⚡ Using in-memory cached vectorstore")
+                return self.cache[index_key]
 
-    persist_path = os.path.join(BASE_VECTORSTORE_PATH, index_key)
+            # ✅ If in disk exists → Load
+            if os.path.exists(persist_path):
+                print(f"✅ Loading existing vectorstore from '{persist_path}'...")
 
-    try:
-        # ✅ In-memory cache
-        if index_key in VECTORSTORE_CACHE:
-            print("⚡ Using in-memory cached vectorstore")
-            return VECTORSTORE_CACHE[index_key]
+                vectorstore = await asyncio.to_thread(
+                    FAISS.load_local,
+                    persist_path,
+                    embedding,
+                    allow_dangerous_deserialization=True,
+                )
 
-        # ✅ If exists → Load
-        if os.path.exists(persist_path):
-            print(f"✅ Loading existing vectorstore from '{persist_path}'...")
+                self.cache[index_key] = vectorstore
+                return vectorstore
 
-            vectorstore = await asyncio.to_thread(
-                FAISS.load_local,
-                persist_path,
-                embedding,
-                allow_dangerous_deserialization=True
+            # ❌ Else → Build
+            print("🔨 Building new vectorstore...")
+
+            loader = PyPDFLoader(pdf_temp_path)
+            docs = await loader.aload()
+
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
             )
 
-            VECTORSTORE_CACHE[index_key] = vectorstore
+            splits = splitter.split_documents(docs)
+
+            vectorstore = await asyncio.to_thread(
+                FAISS.from_documents,
+                splits,
+                embedding,
+            )
+
+            await asyncio.to_thread(
+                vectorstore.save_local, 
+                persist_path,
+            )
+
+            self.cache[index_key] = vectorstore
+
+            print(f"💾 Vectorstore saved to '{persist_path}'")
+
             return vectorstore
 
-        # ❌ Else → Build
-        print("🔨 Building new vectorstore...")
+        finally:
+            if os.path.exists(pdf_temp_path):
+                os.remove(pdf_temp_path)
 
-        loader = PyPDFLoader(pdf_temp_path)
-        docs = await loader.aload()
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+
+class RetrieverService:
+
+    def __init__(
+        self,
+        search_type: str = "mmr",
+        k: int = 4,
+        fetch_k: int = 20,
+    ):
+        self.search_type = search_type
+        self.k = k
+        self.fetch_k = fetch_k
+
+    @traceable(name="retriever_search")
+    async def search(
+        self,
+        vectorstore: FAISS,
+        query: str,
+    ) -> list:
+
+        retriever = vectorstore.as_retriever(
+            search_type=self.search_type,
+            search_kwargs={
+                "k": self.k,
+                "fetch_k": self.fetch_k,
+            },
         )
 
-        splits = splitter.split_documents(docs)
-
-        vectorstore = await asyncio.to_thread(
-            FAISS.from_documents,
-            splits,
-            embedding,
-        )
-
-        await asyncio.to_thread(vectorstore.save_local, persist_path)
-
-        VECTORSTORE_CACHE[index_key] = vectorstore
-
-        print(f"💾 Vectorstore saved to '{persist_path}'")
-
-        return vectorstore
-
-    finally:
-        if os.path.exists(pdf_temp_path):
-            os.remove(pdf_temp_path)  # always deleted, even if an error occurs
-
-
-
-# ─────────────────────────────────────────
-# Build retriever & search
-# ─────────────────────────────────────────
-@traceable(name="retriever_search")
-async def retriver_search(vectorstore: FAISS, query: str) -> list:
-    """
-    Search the vectorstore for chunks relevant to the query.
-
-    Args:
-        vectorstore: Your FAISS vectorstore from build_vectorstore()
-        query: The user's question or search string
-
-    Returns:
-        A list of the 4 most relevant document chunks
-    """
-    retriever = vectorstore.as_retriever(
-        # here we can use mmr or semalirity
-        search_type="mmr", 
-        search_kwargs={
-             "k": 4,
-            "fetch_k": 20,
-        }
-    )
-
-    docs = await retriever.ainvoke(query)
-
-    return docs
-
+        docs = await retriever.ainvoke(query)
+        return docs
 
 
 # ─────────────────────────────────────────
@@ -134,6 +138,8 @@ def make_rag_tool(vectorstore: FAISS):
     Call this once after build_vectorstore() and pass the result to your agent.
     """
 
+    retriver_search = RetrieverService()
+
     @tool 
     async def rag_tool(query: str) -> dict:
         """
@@ -141,7 +147,8 @@ def make_rag_tool(vectorstore: FAISS):
         Use this tool when the user asks factual / conceptual questions
         that might be answered from the stored documents.
         """
-        docs: list[Document] = await retriver_search(
+        
+        docs: list[Document] = await retriver_search.search(
             vectorstore, 
             query,
         )
