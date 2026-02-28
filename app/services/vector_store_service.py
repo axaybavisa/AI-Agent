@@ -5,11 +5,10 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.tools import tool
-from langchain_core.documents import Document
 
 from langsmith import traceable
 
-from app.services.pdf_service import _index_key
+from app.services.pdf_service import IndexKeyGenerator
 from app.services.llm_service import get_embedding
 
 
@@ -31,16 +30,18 @@ class VectorStoreService:
         chunk_overlap: int = 100, 
     ) -> FAISS:
             
-        # Create embedding instance (professional pattern)
+        # Create embedding instance 
         embedding = get_embedding()
         embedding_name = "models/gemini-embedding-001"
 
-        index_key = _index_key(
-            pdf_temp_path,
-            chunk_size,
-            chunk_overlap,
-            embedding_name,
+        index_generator = IndexKeyGenerator(
+            pdf_path=pdf_temp_path,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            embed_model_name=embedding_name,
         )
+
+        index_key: str = index_generator.generate_index_key()
 
         persist_path = os.path.join(self.base_path, index_key)
 

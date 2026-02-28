@@ -6,47 +6,57 @@ import aiofiles
 
 from pathlib import Path
 from fastapi import UploadFile
+from typing import Dict
 from langsmith import traceable
 
 
 # ─────────────────────────────────────────
 # FILE FINGERPRINT
 # ─────────────────────────────────────────
-def _file_fingerprint(path: str)-> dict:
-    p = Path(path)
-    h = hashlib.sha256()
+class IndexKeyGenerator:
+    
+    def __init__(
+            self,
+            pdf_path: str,
+            chunk_size: int,
+            chunk_overlap: int,
+            embed_model_name: str
+    ):
+        self.pdf_path = pdf_path
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.embed_model_name = embed_model_name
 
-    with p.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
+    def _file_fingerprint(self)-> Dict[str, str]:
+        p = Path(self.pdf_path)
+        h = hashlib.sha256()
 
-    stat = p.stat()
+        with p.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
 
-    return {
-        "sha256": h.hexdigest(),
-        "size": stat.st_size, 
-    }        
+        stat = p.stat()
 
-def _index_key(
-        pdf_path: str, 
-        chunk_size: int, 
-        chunk_overlap: int, 
-        embed_model_name: str
-    ) -> str:
+        return {
+            "sha256": h.hexdigest(),
+            "size": stat.st_size, 
+        }
 
-    fingerprint = _file_fingerprint(pdf_path)
+    def generate_index_key(self) -> str:
 
-    meta = {
-        "pdf_fingerprint": fingerprint["sha256"],
-        "chunk_size": chunk_size,
-        "chunk_overlap": chunk_overlap,
-        "embedding_model": embed_model_name,
-        "format": "v1",
-    }
+        fingerprint = self._file_fingerprint()
 
-    return hashlib.sha256(
-        json.dumps(meta, sort_keys=True).encode("utf-8")
-        ).hexdigest()
+        meta = {
+            "pdf_fingerprint": fingerprint["sha256"],
+            "chunk_size": self.chunk_size,
+            "chunk_overlap": self.chunk_overlap,
+            "embedding_model": self.embed_model_name,
+            "format": "v1",
+        }
+
+        return hashlib.sha256(
+            json.dumps(meta, sort_keys=True).encode("utf-8")
+        ).hexdigest()  
 
 
 # ─────────────────────────────────────────
