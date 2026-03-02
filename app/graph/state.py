@@ -10,5 +10,7 @@ class ChatState(BaseModel):
     user_id: str | None = None
     pdf_id: str | None = None
     retrieved_docs: list[str] = Field(default_factory=list)
+
+    use_rag: bool = False
     
 

@@ -3,10 +3,13 @@ from langchain_core.messages import SystemMessage
 from langsmith import traceable
 
 from app.graph.state import ChatState
-from app.services.llm_service import get_llm
-from app.services.pdf_service import UploadFile, pdf_load
-from app.services.vector_store_service import VectorStoreService, RAGToolService
+from app.tools.llm_service import get_llm
+from app.tools.pdf_service import UploadFile, pdf_load
+from app.tools.vector_store_service import VectorStoreService, RAGToolService
 
+from langchain_community.tools import DuckDuckGoSearchRun
+
+search_tool = DuckDuckGoSearchRun(regin="us-en")
 
 # ─────────────────────────────────────────
 # Bind tools to LLM
@@ -27,7 +30,7 @@ def bind_tool_to_llm(rag_tool):
 
     llm = get_llm()
 
-    tools = [rag_tool]
+    tools = [rag_tool, search_tool]
     llm_with_tools = llm.bind_tools(tools)
 
     return llm_with_tools
@@ -37,12 +40,16 @@ def bind_tool_to_llm(rag_tool):
 # Full pipeline — wire everything together
 # ─────────────────────────────────────────
 async def setup_rg_pipeline(upload: UploadFile):
-    """Run once when a PDF is uploaded. Returns a ready-to-use rag_tool."""
+    """
+    Builds RAG pipeline once per uploaded PDF.
+    Returns:
+        llm_with_tools -> LLM capable of tool calling
+        rag_tool       -> Retrieval tool
+    """
 
     tmp_path = await pdf_load(upload)
 
     vectorstore_service = VectorStoreService()
-    
     vectorstore = await vectorstore_service.build_vectorstore(
         pdf_temp_path=tmp_path,
     )

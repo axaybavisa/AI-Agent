@@ -8,8 +8,8 @@ from langchain_core.tools import tool
 
 from langsmith import traceable
 
-from app.services.pdf_service import IndexKeyGenerator
-from app.services.llm_service import get_embedding
+from app.tools.pdf_service import IndexKeyGenerator
+from app.tools.llm_service import get_embedding
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -132,6 +132,7 @@ class RetrieverService:
         )
 
         docs = await retriever.ainvoke(query)
+        
         return docs
 
 

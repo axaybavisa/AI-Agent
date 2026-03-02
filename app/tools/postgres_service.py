@@ -1,20 +1,19 @@
 import os
+import asyncio
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+async def main():
 
-class Base(DeclarativeBase):
-    pass
+    async with AsyncPostgresSaver.from_conn_string(DATABASE_URL) as checkpointer:
+        
+        await checkpointer.setup()
 
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+        print("Checkpointer is ready!")
 
+if __name__=="__main__":
+    asyncio.run(main())

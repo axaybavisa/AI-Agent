@@ -5,10 +5,11 @@ from app.graph.graph_builder import build_graph
 
 
 """This name has been show on langsmith traking."""
-os.environ['LANGCHAIN_PROJECT'] = "RAG-App"
+os.environ['LANGCHAIN_PROJECT'] = "AI-Agent"
 
 app = FastAPI()
 
+# Store session graphs
 sessions: Dict[str, any] = {} 
 
 @app.post("/upload")
