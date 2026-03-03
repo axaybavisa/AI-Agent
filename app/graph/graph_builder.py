@@ -1,39 +1,37 @@
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from app.nodes.router import UploadFile, setup_rg_pipeline, chat_node
-from app.graph.state import ChatState
+from app.services.pipelines import UploadFile, build_tools
+from app.nodes.router import create_agent_node
+from app.graph.state import AgentState
 
 async def build_graph(upload: UploadFile | None = None):
-    llm_with_tools, tools= await setup_rg_pipeline(upload)
+   
+   tools = await build_tools(upload)
 
-    async def llm_node(state: ChatState):
-        return await chat_node(state, llm_with_tools)
-    
-    builder = StateGraph(ChatState)
+   agent_node = await create_agent_node(tools)
 
-    builder.add_node("llm", llm_node)
-    builder.set_entry_point("llm")
+   tool_node = ToolNode(tools)
 
-    if tools:
-        tool_node = ToolNode(tools)
-        builder.add_node("tools", tool_node)
 
-        builder.add_conditional_edges(
-            "llm",
-            tools_condition,
-            {
-                "tools": "tools",
-                END: END,
-            },
-        )
+   builder = StateGraph(AgentState)
 
-        builder.add_edge("tools", "llm")
+   builder.add_node("agent", agent_node)
+   builder.add_node("tools", tool_node)
 
-    else:
-        builder.add_edge("llm", END)
+   builder.set_entry_point("agent")
 
-    graph = builder.compile()
+   builder.add_conditional_edges(
+        "agent", 
+        tools_condition,
+        {
+            "tools": "tools",
+            END: END,
+        },
+    )
+   
+   builder.add_edge("tools", "agent")
 
-    return graph
+   graph = builder.compile()
 
+   return graph

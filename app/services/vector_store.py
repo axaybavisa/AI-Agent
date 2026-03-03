@@ -8,8 +8,8 @@ from langchain_core.tools import tool
 
 from langsmith import traceable
 
-from app.tools.pdf_service import IndexKeyGenerator
-from app.tools.llm_service import get_embedding
+from app.services.pdf import IndexKeyGenerator
+from app.services.llms import get_embedding
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -150,17 +150,13 @@ class RAGToolService:
         @tool
         async def rag_tool(query: str) -> dict:
             """
-            Search the uploaded PDF and return relevant context.
+            Use this tool ONLY when the user asks questions
+            about the uploaded PDF document.
 
-            Args:
-                query: The user's question related to the document.
+            It retrieves relevant sections from the document
+            to help answer document-related questions.
 
-            Returns:
-                A dictionary containing:
-                - query
-                - context
-                - metadata
-                - num_docs_retrieved
+            Do NOT use it for general knowledge questions.
             """
 
             docs = await self.retriever.search(
@@ -168,14 +164,14 @@ class RAGToolService:
                 query,
             )
 
-            context = "\n\n".join(doc.page_content for doc in docs)
-            metadata = [doc.metadata for doc in docs]
+            MAX_CHARS = 4000
+            context = ""
 
-            return {
-                "query": query,
-                "context": context,
-                "metadata": metadata,
-                "num_docs_retrieved": len(docs),
-            }
+            for doc in docs:
+                if len(context) + len(doc.page_content) > MAX_CHARS:
+                    break
+                context += doc.page_content + "\n\n"
+
+            return context.strip()    
 
         return rag_tool

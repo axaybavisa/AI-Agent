@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, Form
 from typing import Optional
 from uuid import uuid4
 from app.graph.graph_builder import build_graph
+from pydantic import BaseModel
+
 
 app = FastAPI()
 
@@ -35,7 +37,6 @@ async def upload_endpoint(
     }
 
 
-from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
