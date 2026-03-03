@@ -8,13 +8,14 @@ load_dotenv()
 # ─────────────────────────────────────────
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         temperature=0.7,
         thinking_budget=0,  # disables thinking mode → removes signature from output
+        streaming=True
     )
 
 
 def get_embedding():
     return GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001"
+        model="models/gemini-embedding-001",
     )

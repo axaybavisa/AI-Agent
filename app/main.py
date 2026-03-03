@@ -1,42 +1,64 @@
-import os
-from typing import Dict
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile, File, Form
+from typing import Optional
+from uuid import uuid4
 from app.graph.graph_builder import build_graph
-
-
-"""This name has been show on langsmith traking."""
-os.environ['LANGCHAIN_PROJECT'] = "AI-Agent"
 
 app = FastAPI()
 
-# Store session graphs
-sessions: Dict[str, any] = {} 
+# ⚠️ Use Redis/DB in production
+sessions = {}
+
 
 @app.post("/upload")
-async def upload_pdf(session_id: str, upload: UploadFile):
+async def upload_endpoint(
+    session_id: Optional[str] = Form(None),
+    upload: Optional[UploadFile] = File(None),
+):
+    """
+    Build graph.
+    - If PDF uploaded → RAG enabled
+    - If not → only other tools enabled
+    """
+
+    # Generate session if not provided
+    if not session_id:
+        session_id = str(uuid4())
 
     graph = await build_graph(upload)
 
     sessions[session_id] = graph
 
-    return {"status": "Graph built successfully"}
+    return {
+        "status": "Graph built",
+        "session_id": session_id,
+        "rag_enabled": upload is not None,
+    }
+
+
+from pydantic import BaseModel
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
 
 
 @app.post("/chat")
-async def chat(session_id: str, message: str):
+async def chat_endpoint(request: ChatRequest):
 
-    graph = sessions.get(session_id)
+    graph = sessions.get(request.session_id)
 
+    # If session doesn't exist → build default (no PDF)
     if not graph:
-        return {"error": "Session not found. Upload PDF first."}
+        graph = await build_graph()
+        sessions[request.session_id] = graph
 
     result = await graph.ainvoke({
         "messages": [
-            {"role": "user", "content": message}
+            {"role": "user", "content": request.message}
         ]
     })
 
-    return result["messages"][-1].content
-
-
-
+    return {
+        "response": result["messages"][-1].content
+    }

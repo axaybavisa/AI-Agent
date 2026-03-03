@@ -1,16 +1,18 @@
-from pydantic import BaseModel, Field
-from typing import Annotated
+from pydantic import BaseModel
+from typing import Annotated, TypedDict, Optional
 
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
-"""State definition for RAG graph."""
-class ChatState(BaseModel):
-    messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
-    user_id: str | None = None
-    pdf_id: str | None = None
-    retrieved_docs: list[str] = Field(default_factory=list)
+class DocumentMetadata(BaseModel):
+    source: str
+    page: Optional[int] = None
 
-    use_rag: bool = False
-    
+class ChatState(TypedDict, total=False):
+    messages: Annotated[list[BaseMessage], add_messages]
+    session_id: str
 
+    retrieved_docs: list[str]
+    doc_metadata: list[DocumentMetadata]
+
+    answer: str
