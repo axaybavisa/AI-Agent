@@ -7,8 +7,11 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-# ⚠️ Use Redis/DB in production
 sessions = {}
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
 
 
 @app.post("/upload")
@@ -16,11 +19,6 @@ async def upload_endpoint(
     session_id: Optional[str] = Form(None),
     upload: Optional[UploadFile] = File(None),
 ):
-    """
-    Build graph.
-    - If PDF uploaded → RAG enabled
-    - If not → only other tools enabled
-    """
 
     # Generate session if not provided
     if not session_id:
@@ -35,13 +33,6 @@ async def upload_endpoint(
         "session_id": session_id,
         "rag_enabled": upload is not None,
     }
-
-
-
-
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
 
 
 @app.post("/chat")
