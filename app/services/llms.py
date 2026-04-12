@@ -1,21 +1,24 @@
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from functools import lru_cache
 
-load_dotenv()
+from app.core.config import get_settings
+
+settings = get_settings()
 
 # ─────────────────────────────────────────
 # LLM INIT
 # ─────────────────────────────────────────
+@lru_cache(10)
 def get_llm():
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=settings.GEMINI_MODEL,
+        google_api_key=settings.GOOGLE_API_KEY,
         temperature=0.7,
-        thinking_budget=0,  # disables thinking mode → removes signature from output
-        streaming=True
     )
 
 
 def get_embedding():
     return GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
+        model=settings.GEMINI_EMBEDDING_MODEL,
+        google_api_key=settings.GOOGLE_API_KEY,
     )

@@ -8,8 +8,11 @@ from langchain_core.tools import tool
 
 from langsmith import traceable
 
-from app.services.pdf import IndexKeyGenerator
 from app.services.llms import get_embedding
+from app.services.pdf_loader import IndexKeyGenerator
+from app.core.config import get_settings
+
+setting = get_settings()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -17,39 +20,30 @@ from app.services.llms import get_embedding
 # ─────────────────────────────────────────────────────────────────────
 class VectorStoreService:
 
+    _cache: dict[str, FAISS] = {}  # class-level cache, shared across all instances
+
     def __init__(self, base_path: str = "faiss_index"):
         self.base_path = base_path
-        self.cache: dict[str, FAISS] = {}
         os.makedirs(self.base_path, exist_ok=True)
 
     @traceable(name="build_vectores")
-    async def build_vectorstore(
-        self,
-        pdf_temp_path: str,
-        chunk_size: int = 500,
-        chunk_overlap: int = 100, 
-    ) -> FAISS:
+    async def build_vectorstore(self, pdf_temp_path: str) -> FAISS:
             
         # Create embedding instance 
         embedding = get_embedding()
-        embedding_name = "models/gemini-embedding-001"
 
         index_generator = IndexKeyGenerator(
-            pdf_path=pdf_temp_path,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            embed_model_name=embedding_name,
+            pdf_path=pdf_temp_path
         )
 
         index_key: str = index_generator.generate_index_key()
-
         persist_path = os.path.join(self.base_path, index_key)
 
         try:
             # ✅ In-memory cache
-            if index_key in self.cache:
+            if index_key in VectorStoreService._cache:
                 print("⚡ Using in-memory cached vectorstore")
-                return self.cache[index_key]
+                return VectorStoreService._cache[index_key]
 
             # ✅ If in disk exists → Load
             if os.path.exists(persist_path):
@@ -62,7 +56,7 @@ class VectorStoreService:
                     allow_dangerous_deserialization=True,
                 )
 
-                self.cache[index_key] = vectorstore
+                VectorStoreService._cache[index_key] = vectorstore
                 return vectorstore
 
             # ❌ Else → Build
@@ -72,8 +66,8 @@ class VectorStoreService:
             docs = await loader.aload()
 
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
+                chunk_size=setting.CHUNK_SIZE,
+                chunk_overlap=setting.CHUNK_OVERLAP,
             )
 
             splits = splitter.split_documents(docs)
@@ -89,7 +83,7 @@ class VectorStoreService:
                 persist_path,
             )
 
-            self.cache[index_key] = vectorstore
+            VectorStoreService._cache[index_key] = vectorstore
 
             print(f"💾 Vectorstore saved to '{persist_path}'")
 
@@ -106,16 +100,11 @@ class VectorStoreService:
 # ─────────────────────────────────────────
 class RetrieverService:
 
-    def __init__(
-        self,
-        search_type: str = "mmr",
-        k: int = 4,
-        fetch_k: int = 20,
-    ):
-        self.search_type = search_type
-        self.k = k
-        self.fetch_k = fetch_k
+    def __init__(self):
 
+        self.search_type = setting.SEARCH_TYPE
+        self.k = setting.TOP_K
+    
     @traceable(name="retriever_search")
     async def search(
         self,
@@ -127,7 +116,6 @@ class RetrieverService:
             search_type=self.search_type,
             search_kwargs={
                 "k": self.k,
-                "fetch_k": self.fetch_k,
             },
         )
 

@@ -1,6 +1,6 @@
-from app.services.pdf import UploadFile, pdf_load
+from app.services.pdf_loader import UploadFile, pdf_load
 from app.services.vector_store import VectorStoreService, RAGToolService
-from app.services.web_search import search_engine 
+from app.services.web_search import web_search 
 
 
 # ─────────────────────────────────────────
@@ -23,6 +23,6 @@ async def build_tools(upload: UploadFile | None = None):
             rag_tool = RAGToolService(vectorstore).create_tool()
             tools.append(rag_tool)  
 
-    tools.append(search_engine)        
+    tools.append(web_search)        
 
     return tools

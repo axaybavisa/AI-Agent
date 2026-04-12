@@ -9,23 +9,20 @@ from fastapi import UploadFile
 from typing import Dict
 from langsmith import traceable
 
+from app.core.config import get_settings
+
+settings = get_settings()
 
 # ─────────────────────────────────────────
 # FILE FINGERPRINT
 # ─────────────────────────────────────────
 class IndexKeyGenerator:
     
-    def __init__(
-            self,
-            pdf_path: str,
-            chunk_size: int,
-            chunk_overlap: int,
-            embed_model_name: str
-    ):
+    def __init__(self, pdf_path: str):
         self.pdf_path = pdf_path
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        self.embed_model_name = embed_model_name
+        self.chunk_size = settings.CHUNK_SIZE
+        self.chunk_overlap = settings.CHUNK_OVERLAP
+        self.embed_model_name = settings.GEMINI_EMBEDDING_MODEL
 
     def _file_fingerprint(self)-> Dict[str, str]:
         p = Path(self.pdf_path)
